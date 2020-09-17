@@ -159,7 +159,9 @@ if len(sys.argv) > 1:
 else:
     depts = []
     for deptcode, deptname in deptcodesnames.items():
+        print(deptcode, "...", file=sys.stderr, sep="", end="")
         depts.append({'code': deptcode, 'courses': scrapedept(f"https://registration.boun.edu.tr/scripts/sch.asp?donem=2020/2021-1&kisaadi={deptcode}&bolum={deptname}")})
+        print(" done", file=sys.stderr)
     pprint(depts)
 
 # import itertools
