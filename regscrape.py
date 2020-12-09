@@ -5,92 +5,32 @@ import re
 import sys
 from collections import OrderedDict
 import traceback
+from urllib.parse import quote_plus
 
-deptcodesnames = {
-        'ASIA': 'ASIAN+STUDIES',
-        'ASIA': 'ASIAN+STUDIES+WITH+THESIS',
-        'ATA': 'ATATURK+INSTITUTE+FOR+MODERN+TURKISH+HISTORY',
-        'AUTO': 'AUTOMOTIVE+ENGINEERING',
-        'BM': 'BIOMEDICAL+ENGINEERING',
-        'BIS': 'BUSINESS+INFORMATION+SYSTEMS',
-        'BIS': 'BUSINESS+INFORMATION+SYSTEMS+(WITH+THESIS)',
-        'CHE': 'CHEMICAL+ENGINEERING',
-        'CHEM': 'CHEMISTRY',
-        'CE': 'CIVIL+ENGINEERING',
-        'COGS': 'COGNITIVE+SCIENCE',
-        'CSE': 'COMPUTATIONAL+SCIENCE+%26+ENGINEERING',
-        'CET': 'COMPUTER+EDUCATION+%26+EDUCATIONAL+TECHNOLOGY',
-        'CMPE': 'COMPUTER+ENGINEERING',
-        'CEM': 'CONSTRUCTION+ENGINEERING+AND+MANAGEMENT',
-        'PRED': 'EARLY+CHILDHOOD+EDUCATION',
-        'EQE': 'EARTHQUAKE+ENGINEERING',
-        'EC': 'ECONOMICS',
-        'EF': 'ECONOMICS+AND+FINANCE',
-        'ED': 'EDUCATIONAL+SCIENCES',
-        'CET': 'EDUCATIONAL+TECHNOLOGY',
-        'EE': 'ELECTRICAL+%26+ELECTRONICS+ENGINEERING',
-        'ELED': 'ELEMENTARY+TEACHER+EDUCATION+(WITHOUT+THESIS)',
-        'ETM': 'ENGINEERING+AND+TECHNOLOGY+MANAGEMENT',
-        'ENV': 'ENVIRONMENTAL+SCIENCES',
-        'ENVT': 'ENVIRONMENTAL+TECHNOLOGY',
-        'XMBA': 'EXECUTIVE+MBA',
-        'FE': 'FINANCIAL+ENGINEERING',
-        'PA': 'FINE+ARTS',
-        'FLED': 'FOREIGN+LANGUAGE+EDUCATION',
-        'FLT': 'FOREIGN+LANGUAGE+TEACHING+(WITHOUT+THESIS)',
-        'GED': 'GEODESY',
-        'GPH': 'GEOPHYSICS',
-        'GUID': 'GUIDANCE+%26+PSYCHOLOGICAL+COUNSELING',
-        'HIST': 'HISTORY',
-        'HUM': 'HUMANITIES+COURSES+COORDINATOR',
-        'IE': 'INDUSTRIAL+ENGINEERING',
-        'INCT': 'INTERNATIONAL+COMPETITION+AND+TRADE',
-        'MIR': 'INTERNATIONAL+RELATIONS%3aTURKEY%2cEUROPE+AND+THE+MIDDLE+EAST',
-        'MIR': 'INTERNATIONAL+RELATIONS%3aTURKEY%2cEUROPE+AND+THE+MIDDLE+EAST+WITH+THESIS',
-        'INTT': 'INTERNATIONAL+TRADE',
-        'INTT': 'INTERNATIONAL+TRADE+MANAGEMENT',
-        'LS': 'LEARNING+SCIENCES',
-        'LING': 'LINGUISTICS',
-        'AD': 'MANAGEMENT',
-        'MIS': 'MANAGEMENT+INFORMATION+SYSTEMS',
-        'MATH': 'MATHEMATICS',
-        'SCED': 'MATHEMATICS+AND+SCIENCE+EDUCATION',
-        'ME': 'MECHANICAL+ENGINEERING',
-        'MECA': 'MECHATRONICS+ENGINEERING+(WITH+THESIS)',
-        'MECA': 'MECHATRONICS+ENGINEERING+(WITHOUT+THESIS)',
-        'BIO': 'MOLECULAR+BIOLOGY+%26+GENETICS',
-        'PHIL': 'PHILOSOPHY',
-        'PE': 'PHYSICAL+EDUCATION',
-        'PHYS': 'PHYSICS',
-        'POLS': 'POLITICAL+SCIENCE%26INTERNATIONAL+RELATIONS',
-        'PSY': 'PSYCHOLOGY',
-        'YADYOK': 'SCHOOL+OF+FOREIGN+LANGUAGES',
-        'SPL': 'SOCIAL+POLICY+WITH+THESIS',
-        'SOC': 'SOCIOLOGY',
-        'SWE': 'SOFTWARE+ENGINEERING',
-        'SWE': 'SOFTWARE+ENGINEERING+WITH+THESIS',
-        'TRM': 'SUSTAINABLE+TOURISM+MANAGEMENT',
-        'SCO': 'SYSTEMS+%26+CONTROL+ENGINEERING',
-        'TRM': 'TOURISM+ADMINISTRATION',
-        'WTR': 'TRANSLATION',
-        'TR': 'TRANSLATION+AND+INTERPRETING+STUDIES',
-        'TK': 'TURKISH+COURSES+COORDINATOR',
-        'TKL': 'TURKISH+LANGUAGE+%26+LITERATURE',
-        'PRSO': 'UNDERGRADUATE+PROGRAM+IN+PRESCHOOL+EDUCATION',
-        'LL': 'WESTERN+LANGUAGES+%26+LITERATURES'
-}
+def makesoup(address):
+    raw = requests.get(address).text
+    soup = BeautifulSoup(raw, features="html.parser")
+    return soup
+
+def getdeptcodesnames():
+    ectssoup = makesoup("https://registration.boun.edu.tr/scripts/ectsdepsel.asp")
+
+    deptlinks = ectssoup.select("a.menu2")
+    # href attributes has values like: "/scripts/ects.asp?bolum=ASIA"
+    return [ (dl['href'].split('=')[1], quote_plus(dl.get_text().strip())) for dl in deptlinks ]
 
 def getcells(tr):
     return [td.text.strip() for td in tr("td")]
 
-days = ['M', 'T', 'W', 'Th', 'F', 'S']
-daysmap = dict(zip(days, range(len(days))))
-TOTAL_HOURS = 14
-
 def cellids(days, hours):
+    TOTAL_HOURS = 14
+
     return [TOTAL_HOURS * day + hour - 1 for day, hour in zip(days, hours)]
 
 def parsedayshours(ncells):
+    days = ['M', 'T', 'W', 'Th', 'F', 'S']
+    daysmap = dict(zip(days, range(len(days))))
+
     ncells['days'] = [daysmap[day] for day in re.findall(r'M|Th?|W|F|S', ncells['days'])]
     possiblehours = [[]]
     for c in ncells['hours']:
@@ -152,15 +92,65 @@ def scrapedept(deptaddress):
     finally:
         return courses
 
-# top level code
-if len(sys.argv) > 1:
-    deptcourses = scrapedept(sys.argv[1])
-    pprint(deptcourses)
-else:
-    depts = []
-    for deptcode, deptname in deptcodesnames.items():
-        depts.append({'code': deptcode, 'courses': scrapedept(f"https://registration.boun.edu.tr/scripts/sch.asp?donem=2020/2021-1&kisaadi={deptcode}&bolum={deptname}")})
-    pprint(depts)
+def main():
+    if len(sys.argv) > 1:
+        deptcourses = scrapedept(sys.argv[1])
+        pprint(deptcourses)
+    else:
+        depts = []
+        for deptcode, deptname in deptcodesnames.items():
+            depts.append({'code': deptcode, 'courses': scrapedept(f"https://registration.boun.edu.tr/scripts/sch.asp?donem=2020/2021-1&kisaadi={deptcode}&bolum={deptname}")})
+        pprint(depts)
+
+def inputfromrange(prompt, minval, maxval):
+    while True:
+        x = input(prompt)
+        try:
+            x = int(x)
+            if minval <= x <= maxval:
+                return x
+        except:
+            pass
+        print(f"Valid input range is [{minval}, {maxval}]. Please try again.")
+
+def newmain():
+    deptcodesnames = getdeptcodesnames()
+    
+    startyear = inputfromrange("Year to start from (enter 2010 for year 2010/2011): ", 2000, 2020)
+    startsemester = inputfromrange("Semester to start from (enter 1/2/3 for Fall/Spring/Summer: ", 1, 3)
+
+    endyear = inputfromrange("Year to finish at (enter 2010 for year 2010/2011): ", startyear, 2020)
+    endsemester = inputfromrange("Semester to finish at (enter 1/2/3 for Fall/Spring/Summer: ", startsemester if startyear == endyear else 1, 3)
+
+    data = {}
+    year = startyear
+    semester = startsemester
+
+    print(len(deptcodesnames), "departments will be queried each semester")
+    while year <= endyear:
+        yeardata = data[year] = {}
+        while semester <= 3 and (year < endyear or semester <= endsemester):
+            semdata = yeardata[semester] = []
+            for i, (deptcode, deptname) in enumerate(deptcodesnames):
+                try:
+                    deptcourses = scrapedept(f"https://registration.boun.edu.tr/scripts/sch.asp?donem={year}/{year+1}-{semester}&kisaadi={deptcode}&bolum={deptname}")
+                    semdata.append({'deptcode': deptcode, 'deptname': deptname,  'deptcourses': deptcourses})
+                except:
+                    pass
+                print(f"{year}/{year+1}-{semester} {i+1}/{len(deptcodesnames)} departments", end="\r")
+            # next semester!
+            semester += 1
+
+            print()
+
+        # next year!
+        year += 1
+        semester = 1
+
+    with open("pprint.out", 'w') as fout:
+        pprint(data, stream=fout)
+
+newmain()
 
 # import itertools
 # cs = list(itertools.chain(*(d['courses'] for d in depts)))
