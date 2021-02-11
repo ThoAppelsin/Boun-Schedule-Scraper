@@ -8,8 +8,10 @@ import traceback
 from urllib.parse import quote_plus
 
 def makesoup(address):
-    raw = requests.get(address).text
-    soup = BeautifulSoup(raw, features="html.parser")
+    raw = requests.get(address)
+    raw.encoding = 'utf-8'
+    html = raw.text
+    soup = BeautifulSoup(html, features="html.parser")
     return soup
 
 def getdeptcodesnames():
