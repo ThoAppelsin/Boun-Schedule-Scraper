@@ -12,7 +12,7 @@ from urllib.parse import quote_plus
 
 def makesoup(address):
     raw = requests.get(address)
-    print(raw.apparent_encoding)
+    # print(raw.apparent_encoding)
     raw.encoding = 'iso8859-9'
     # raw.encoding = 'utf-8'
     # raw.encoding = raw.apparent_encoding
@@ -93,8 +93,6 @@ def scrapedept(deptaddress):
                 course['areaCode'], course['digitCode'], course['sectionCode'] = re.match(r'([A-Z]+)\s*([^.]+)\.(\d+)', course['name']).groups()
                 course['extras'] = []
                 courses.append(course)
-            if course['name'] == 'ASIA520.02':
-                print(course['parentName'])
     except Exception as err:
         traceback.print_exc()
         # print(err)
