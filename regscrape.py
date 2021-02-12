@@ -3,13 +3,19 @@ from bs4 import BeautifulSoup
 import requests
 import re
 import sys
+import json
+import pandas
+import csv
 from collections import OrderedDict
 import traceback
 from urllib.parse import quote_plus
 
 def makesoup(address):
     raw = requests.get(address)
-    raw.encoding = 'utf-8'
+    print(raw.apparent_encoding)
+    raw.encoding = 'iso8859-9'
+    # raw.encoding = 'utf-8'
+    # raw.encoding = raw.apparent_encoding
     html = raw.text
     soup = BeautifulSoup(html, features="html.parser")
     return soup
@@ -54,8 +60,7 @@ def parsedayshours(ncells):
         ncells['cellIds'] = [cellids(ncells['days'], hours) for hours in ncells['hours']]
 
 def scrapedept(deptaddress):
-    raw = requests.get(deptaddress).text
-    soup = BeautifulSoup(raw, features="html.parser")
+    soup = makesoup(deptaddress)
 
     titlerow = soup.select(".schtitle")[0] # Hopefully there is just one
     titles = OrderedDict((t, t) for t in getcells(titlerow))
@@ -88,6 +93,8 @@ def scrapedept(deptaddress):
                 course['areaCode'], course['digitCode'], course['sectionCode'] = re.match(r'([A-Z]+)\s*([^.]+)\.(\d+)', course['name']).groups()
                 course['extras'] = []
                 courses.append(course)
+            if course['name'] == 'ASIA520.02':
+                print(course['parentName'])
     except Exception as err:
         traceback.print_exc()
         # print(err)
@@ -104,25 +111,71 @@ def main():
             depts.append({'code': deptcode, 'courses': scrapedept(f"https://registration.boun.edu.tr/scripts/sch.asp?donem=2020/2021-1&kisaadi={deptcode}&bolum={deptname}")})
         pprint(depts)
 
+def intfromrange(intable, minval, maxval):
+    intable = int(intable)
+    if minval <= intable <= maxval:
+        return intable
+    else:
+        raise Exception(f"Valid range is [{minval}, {maxval}]. {intable} was given.")
+
 def inputfromrange(prompt, minval, maxval):
     while True:
-        x = input(prompt)
         try:
-            x = int(x)
-            if minval <= x <= maxval:
-                return x
-        except:
-            pass
-        print(f"Valid input range is [{minval}, {maxval}]. Please try again.")
+            return intfromrange(input(prompt), minval, maxval)
+        except Exception as e:
+            print(e, "Please try again.")
+
+def validatestring(string, strings):
+    if string in strings:
+        return string
+    else:
+        raise Exception(f"Valid inputs are {strings}. {string} was given.")
+
+def inputfromstrings(prompt, strings):
+    while True:
+        try:
+            return validatestring(input(prompt), strings)
+        except Exception as e:
+            print(e, "Please try again.")
+
+def printarguments():
+    print("1) Start year (i.e. 2010 for year 2010/2011)")
+    print("2) Start semester (1/2/3 for Fall/Spring/Summer)")
+    print("3) End year")
+    print("4) End semester")
+    print("5) Output format (csv or json)")
 
 def newmain():
     deptcodesnames = getdeptcodesnames()
     
-    startyear = inputfromrange("Year to start from (enter 2010 for year 2010/2011): ", 2000, 2020)
-    startsemester = inputfromrange("Semester to start from (enter 1/2/3 for Fall/Spring/Summer: ", 1, 3)
+    if len(sys.argv) > 1:
+        interactive = False
 
-    endyear = inputfromrange("Year to finish at (enter 2010 for year 2010/2011): ", startyear, 2020)
-    endsemester = inputfromrange("Semester to finish at (enter 1/2/3 for Fall/Spring/Summer: ", startsemester if startyear == endyear else 1, 3)
+        if len(sys.argv) == 6:
+            try:
+                startyear     = intfromrange(sys.argv[1], 2000, 2020)
+                startsemester = intfromrange(sys.argv[2], 1, 3)
+                endyear       = intfromrange(sys.argv[3], startyear, 2020)
+                endsemester   = intfromrange(sys.argv[4], startsemester if startyear == endyear else 1, 3)
+                formatstring  = validatestring(sys.argv[5].lower(), ['csv', 'json'])
+            except Exception as e:
+                print(e, "Please try again. Arguments should be:")
+                printarguments()
+                sys.exit()
+        else:
+            print("Either run without arguments (interactive mode) or with exactly the following arguments:")
+            printarguments()
+            sys.exit()
+    else:
+        interactive = True
+
+        startyear     = inputfromrange("Year to start from (enter 2010 for year 2010/2011): ", 2000, 2020)
+        startsemester = inputfromrange("Semester to start from (enter 1/2/3 for Fall/Spring/Summer: ", 1, 3)
+
+        endyear       = inputfromrange("Year to finish at (enter 2010 for year 2010/2011): ", startyear, 2020)
+        endsemester   = inputfromrange("Semester to finish at (enter 1/2/3 for Fall/Spring/Summer: ", startsemester if startyear == endyear else 1, 3)
+
+        formatstring  = inputfromstrings("Output format (csv or json): ", ['csv', 'json'])
 
     data = {}
     year = startyear
@@ -149,8 +202,22 @@ def newmain():
         year += 1
         semester = 1
 
-    with open("pprint.out", 'w') as fout:
-        pprint(data, stream=fout)
+    outfile = open(f'output.{formatstring}', 'w', encoding='utf-8') if interactive else sys.stdout
+    if formatstring == 'json':
+        print(json.dumps(data), file=outfile)
+    elif formatstring == 'csv':
+        writer = csv.writer(outfile)
+        headerprinted = False
+        for year in data:
+            yeardata = data[year]
+            for sem in yeardata:
+                semdata = yeardata[sem]
+                for deptdata in semdata:
+                    for deptcoursedata in deptdata['deptcourses']:
+                        if not headerprinted:
+                            headerprinted = True
+                            writer.writerow('year term deptcode'.split() + [str(v) for v in deptcoursedata.keys()])
+                        writer.writerow([str(v) for v in [year, sem, deptdata['deptcode']] + list(deptcoursedata.values())])
 
 newmain()
 
